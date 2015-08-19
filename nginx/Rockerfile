@@ -1,0 +1,83 @@
+#!/usr/bin/env ruby
+
+class NginxNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'nginx'
+      }, [], {
+        from: 'archlinux',
+        uid: '1021'
+      })
+    end
+  end
+
+  def port
+    {web_port => web_port}
+  end
+
+  def web_port; '443' end
+
+  def links
+    [['airweb']]
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_nginx
+    setup_logging
+    generate_interface
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_nginx
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'nginx')
+  end
+
+  def setup_logging
+    run('ln', '-sf', '/dev/stdout', '/home/nginx/access.log')
+    run('ln', '-sf', '/dev/stderr', '/home/nginx/error.log')
+  end
+
+  def generate_interface
+    expose
+    cmd('nginx', '-g', 'daemon off;')
+  end
+
+  def conf_pwd;  Pathname.new('/etc/nginx') end
+  def conf_path; 'nginx.conf' end
+  def confd_path; Pathname.new('conf.d') end
+  def certs_path; Pathname.new('certs') end
+
+  def volume
+    [conf_path, confd_path, certs_path].map do |path|
+      [conf_pwd + path, host_pwd + path, 'ro']
+    end
+  end
+
+  def volume_exclude
+    [certs_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    true
+  end
+
+  def setup_volume
+  end
+
+  def clean_volume
+  end
+end

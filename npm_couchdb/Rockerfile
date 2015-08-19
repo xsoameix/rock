@@ -1,0 +1,162 @@
+#!/usr/bin/env ruby
+require_relative '../lib'
+require_relative '../npm'
+
+class NpmCouchdbNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'couchdb'
+      }, [], {
+        from: 'archlinux',
+        uid: '1023'
+      })
+    end
+  end
+
+  include Compilers
+
+  def port
+    {couchdb_port => couchdb_port}
+  end
+
+  def couchdb_port; '55453' end
+
+  def host_env
+    addr = Npm.dbaddr
+    port = couchdb_port
+    user = 'admin'
+    pass = SecureRandom.hex(800)
+    local_registry  = "http://#{user}:#{pass}@localhost:#{port}/registry"
+    local_replicate = "http://#{user}:#{pass}@localhost:#{port}/_replicate"
+    registry        = "http://#{user}:#{pass}@#{addr}:#{port}/registry"
+    replicate       = "http://#{user}:#{pass}@#{addr}:#{port}/_replicate"
+    rewrite         = "http://#{addr}:#{port}/registry/_design/app/_rewrite"
+    {ADDR: addr, PORT: port, USER: user, PASS: pass,
+     LOCAL_REGISTRY: local_registry, LOCAL_REPLICATE: local_replicate,
+     REGISTRY: registry, REPLICATE: replicate, REWRITE: rewrite}
+  end
+
+  def pwd; Pathname.new('/var/lib') + name end
+
+  def generate
+    generate_header
+    install_couchdb
+    configure_couchdb
+    generate_interface
+  end
+
+  def install_couchdb
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'couchdb')
+  end
+
+  def configure_couchdb
+    setup_couch_directories
+    as_user do
+    end
+  end
+
+  def setup_couch_directories
+    mod = '0750'
+    run('chmod', mod, '/etc/couchdb')
+    run('chmod', mod, '/var/lib/couchdb')
+    run('chmod', mod, '/var/log/couchdb')
+    run('chmod', mod, '/var/run/couchdb')
+  end
+
+  def generate_interface
+    cmd(pwd + entrypoint)
+  end
+
+  def entrypoint; 'entrypoint.sh' end
+
+  def lib_path; Pathname.new('lib') end
+  def log_path; Pathname.new('log') end
+
+  def volume
+    [['/var/lib/couchdb', host_pwd + lib_path],
+     ['/var/log/couchdb', host_pwd + log_path]]
+  end
+
+  def volume_exclude
+    [lib_path, log_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    (node_pwd + lib_path).exist?
+  end
+
+  def setup_volume
+    script('echo `id -u; id -g`')
+    @data[:uid], @data[:gid] = exec_container('getuser', Binds: []).scan(/\d+/)
+    mkdir(node_pwd + lib_path)
+    mkdir(node_pwd + log_path)
+    File.open(node_pwd + lib_path + entrypoint, 'w') do |f|
+      local = '/etc/couchdb/local.ini'
+      f.puts('#!/bin/bash')
+
+      section = 'couch_httpd_auth'
+      field = 'appdotnet, avatar, avatarMedium, avatarLarge, date, email, fields, freenode, fullname, github, homepage, name, roles, twitter, type, _id, _rev'
+      f.puts("sed -i '/^\\[#{section}\\]$/a public_fields = #{field}' #{local}")
+      f.puts("sed -i '/^\\[#{section}\\]$/a users_db_public = true' #{local}")
+
+      section = 'httpd'
+      f.puts("sed -i '/^\\[#{section}\\]$/a port = #{couchdb_port}' #{local}")
+      f.puts("sed -i '/^\\[#{section}\\]$/a bind_address = 0.0.0.0' #{local}")
+      f.puts("sed -i '/^\\[#{section}\\]$/a secure_rewrites = false' #{local}")
+
+      section = 'couchdb'
+      f.puts("sed -i '/^\\[#{section}\\]$/a delayed_commits = false' #{local}")
+
+      section = 'admins'
+      f.puts("sed -i '/^\\[#{section}\\]$/a admin = '\"$PASS\" #{local}")
+      f.puts('couchdb_pid=0')
+      f.puts('clean() {')
+      f.puts('  if [ $couchdb_pid -ne 0 ]; then')
+      f.puts('    kill -s SIGTERM "$couchdb_pid"')
+      f.puts('    wait "$couchdb_pid"')
+      f.puts('  fi')
+      f.puts('  ps -ef')
+      f.puts('  exit 0')
+      f.puts('}')
+      f.puts("trap 'kill ${!}; clean' SIGTERM")
+      f.puts('couchdb &')
+      f.puts('couchdb_pid="$!"')
+      f.puts('sleep 3')
+      error = '\'"error":"not_found"\''
+      f.puts("if [ `curl -s $LOCAL_REGISTRY | grep -c #{error}` -eq 1 ]; then")
+      f.puts('  curl -s -X PUT $LOCAL_REGISTRY')
+
+      data = {'source'        => 'https://skimdb.npmjs.com/registry',
+              'target'        => "'$LOCAL_REGISTRY'",
+              'continuous'    => true,
+              'create_target' => true}.to_json
+      type = 'Content-Type: application/json'
+      f.puts("  curl -s -X POST $LOCAL_REPLICATE -d '#{data}' -H '#{type}'")
+      f.puts('fi')
+      f.puts('while true; do')
+      f.puts('  tail -f /dev/null & wait ${!}')
+      f.puts('done')
+    end
+    `chmod +x #{node_pwd + lib_path + entrypoint}`
+  end
+
+  def clean_volume
+    (node_pwd + lib_path + entrypoint).delete
+    [lib_path, log_path].each do |subpath|
+      (node_pwd + subpath).children(false).each do |c|
+        script('rm', '-r', Pathname.new('/var') + subpath + 'couchdb' + c)
+      end
+    end
+    exec_container('clean')
+    rmdir(node_pwd + lib_path)
+    rmdir(node_pwd + log_path)
+  end
+end

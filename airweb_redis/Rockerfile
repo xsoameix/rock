@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+require_relative '../airweb'
+
+class AirwebRedisNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'redis'
+      }, [], {
+        from: 'archlinux',
+        uid: '1013'
+      })
+    end
+  end
+
+  def host_env
+    {ADDR: Airweb.session_addr, PORT: '6379'}
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_redis
+    as_user do
+      generate_interface
+    end
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_redis
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'redis')
+  end
+
+  def generate_interface
+    cmd('redis-server')
+  end
+
+  def volume
+    []
+  end
+
+  def volume_exclude
+    []
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    true
+  end
+
+  def setup_volume
+  end
+
+  def clean_volume
+  end
+end

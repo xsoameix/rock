@@ -1,0 +1,105 @@
+#!/usr/bin/env ruby
+require_relative '../lib'
+require_relative '../airweb'
+
+class AirwebNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: Airweb.user
+      }, [], {
+        from: 'archlinux',
+        uid: '1012'
+      })
+    end
+  end
+
+  include Compilers
+
+  def port
+    {web_port => web_port,
+     observer_port => observer_port}
+  end
+
+  def web_port;      '54276' end
+  def observer_port; '54494' end
+
+  def host_env
+    {OBSERVER_PORT: observer_port,
+     REPO_PATH: repo_path,
+     PORT: web_port,
+     NODE_ENV: 'production',
+     SSL_CRT: pwd + ssl_path + 'server.crt',
+     SSL_KEY: pwd + ssl_path + 'server.key',
+     SESSION_SECRET: SecureRandom.base64}
+  end
+
+  def links
+    [['airweb_postgres', Airweb.dbaddr], ['airweb_redis', Airweb.session_addr]]
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_node
+    as_user do
+      setup_compiler_env
+      setup_npm_prefix
+      install_livescript
+      configure_observer
+      generate_interface
+    end
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_node
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'nodejs', 'npm', 'base-devel')
+  end
+
+  def configure_observer
+    add_config_file(pwd + observer_path, observer_path)
+    with_path(@bin) do
+      run(@lsc, '-c', pwd + observer_path)
+    end
+  end
+
+  def generate_interface
+    cmd('node', pwd + observer_path.basename(observer_path.extname))
+  end
+
+  def observer_path; Pathname.new('observer.ls') end
+
+  def repo_path; Pathname.new('repo') end
+  def ssl_path;  Pathname.new('ssl') end
+
+  def volume
+    [repo_path, ssl_path].map { |path| [pwd + path, host_pwd + path, 'ro'] }
+  end
+
+  def volume_exclude
+    [repo_path, ssl_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    (node_pwd + repo_path).exist?
+  end
+
+  def setup_volume
+    mkdir(node_pwd + repo_path)
+  end
+
+  def clean_volume
+    rmdir(node_pwd + repo_path)
+  end
+end

@@ -1,0 +1,214 @@
+#!/usr/bin/env ruby
+require_relative '../lib'
+require_relative '../npm'
+
+class Repo
+
+  attr_reader :name, :node
+
+  def initialize(node_root, app_name, node_name)
+    @name = Pathname.new(node_name)
+    @node = Node.load(node_root, app_name, node_name)
+  end
+end
+
+class NodejsRepo < Repo
+
+  def action; 'nodejs' end
+end
+
+class CRepo < Repo
+
+  def action; 'c' end
+end
+
+class RailsRepo < Repo
+
+  def action; 'rails' end
+end
+
+class GitNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'git'
+      }, [], {
+        from: 'archlinux',
+        uid: '1022'
+      })
+    end
+  end
+
+  include Compilers
+
+  def links
+    [['npm_couchdb', Npm.dbaddr]] + repo.map { |r| [r.name] }
+  end
+
+  def repo
+    @repo ||= [['airweb',        NodejsRepo],
+               ['airweb_sender', CRepo]].map do |node_name, klass|
+      klass.new(node_root, app_name, node_name)
+    end
+  end
+
+  def port
+    {git_port => git_port}
+  end
+
+  def git_port; '54787' end
+
+  def generate
+    generate_header
+    create_user
+    install_openssl_git_and_base_devel
+    configure_sshd_and_git
+    generate_interface
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /usr/bin/git-shell', name)
+  end
+
+  def install_openssl_git_and_base_devel
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'openssh', 'git',
+        'ruby', 'python2', 'nodejs', 'npm', 'base-devel',
+        'cmake', 'check', 'pkg-config')
+  end
+
+  def configure_sshd_and_git
+    generate_ssh_keys
+    add_sshd_config
+    as_user do
+      add_authorized_keys
+      setup_compiler_env
+      setup_npm_prefix
+      setup_npm_registry
+      install_livescript
+      install_nitrogen
+      add_observer_config
+    end
+  end
+
+  def generate_ssh_keys
+    run('ssh-keygen', '-A')
+    run('chown', "#{name}:#{name}", '/etc/ssh/ssh_host_rsa_key')
+  end
+
+  def add_sshd_config
+    config = {
+      Port: git_port,
+      Protocol: '2',
+      HostKey: '/etc/ssh/ssh_host_rsa_key',
+      PermitRootLogin: 'no',
+      StrictModes: 'yes',
+      RSAAuthentication: 'yes',
+      PubkeyAuthentication: 'yes',
+      PasswordAuthentication: 'no',
+      PermitEmptyPasswords: 'no',
+      UsePAM: 'no',
+      Banner: 'none',
+      AuthorizedKeysFile: '.ssh/authorized_keys',
+      ChallengeResponseAuthentication: 'no',
+      PrintMotd: 'no',
+      UsePrivilegeSeparation: 'sandbox',
+      Subsystem: 'sftp /usr/lib/ssh/sftp-server',
+      AllowUsers: name
+    }
+    add_config('/etc/ssh/sshd_config', config)
+  end
+
+  def add_authorized_keys
+    run('mkdir', '.ssh')
+    run('chmod', '700', '.ssh')
+    add_config_from('.ssh/authorized_keys', authorized_keys)
+    run('chmod', '600', '.ssh/authorized_keys')
+  end
+
+  def setup_npm_registry
+    registry = '"$COUCHDB_ENV_REWRITE"'
+    run("echo '#!/bin/bash'",                           '>>', pwd + entrypoint)
+    run("echo 'npm config set registry #{registry}'",   '>>', pwd + entrypoint)
+    run("echo 'exec /usr/sbin/sshd -D -p #{git_port}'", '>>', pwd + entrypoint)
+    run('chmod', '+x',                                        pwd + entrypoint)
+  end
+
+  def add_observer_config
+    run('mkdir', pwd + observer_port_path)
+    repo.each do |r|
+      run("echo #{r.node.observer_port} > #{pwd + observer_port_path + r.name}")
+    end
+  end
+
+  def observer_port_path
+    'observer_port'
+  end
+
+  def generate_interface
+    expose
+    cmd(pwd + entrypoint)
+  end
+
+  def authorized_keys; 'authorized_keys' end
+  def entrypoint;      'entrypoint.sh' end
+
+  def repo_path; Pathname.new('repo') end
+  def hook_path; Pathname.new('hooks') end
+  def git_path;  Pathname.new('git') end
+
+  def volume
+    repo.map do |r|
+      [pwd + repo_path + r.name + repo_path, r.node.host_pwd + r.node.repo_path]
+    end + [repo_path, hook_path].map { |path| [pwd + path, host_pwd + path] }
+  end
+
+  def volume_exclude
+    [repo_path, authorized_keys]
+  end
+
+  def dependent_volume_setup?
+    repo.all? { |r| (r.node.node_pwd + repo_path).exist? }
+  end
+
+  def volume_setup?
+    repo.all? { |r| (node_pwd + repo_path + r.name + repo_path).exist? }
+  end
+
+  def setup_volume
+    repo.each do |r|
+      `setfacl -m d:u:#{uid}:rwx #{r.node.node_pwd + repo_path}`
+      `setfacl -m u:#{uid}:rwx #{r.node.node_pwd + repo_path}`
+      mkdir(node_pwd + repo_path + r.name + repo_path)
+    end
+    repo.each do |r|
+      chdir(pwd + repo_path + r.name) do
+        script('git', 'init', '--bare', git_path)
+        postfile = git_path + 'hooks/post-receive'
+        script('ln', '-s', pwd + hook_path + r.action, postfile)
+      end
+    end
+    exec_container('setup')
+  end
+
+  def clean_volume(filter = nil)
+    remove = repo.select { |r| filter ? r.name.to_s == filter : true }
+    if remove.size > 0
+      remove.each do |r|
+        puts r.name
+        Container.find_and_destroy(r.node.fullname)
+        (r.node.node_pwd + repo_path).children(false).each do |c|
+          script('rm', '-r', pwd + repo_path + r.name + repo_path + c)
+        end
+        script('rm', '-r', pwd + repo_path + r.name + git_path)
+      end
+      exec_container('clean')
+    end
+    if remove.size == repo.size
+      rmdir(node_pwd + repo_path)
+    end
+  end
+end

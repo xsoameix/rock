@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+require 'pathname'
+require 'socket'
+require 'json'
+
+class Builder
+
+  def run
+    setup_config
+    checkout
+    change_workdir
+    compile
+    restart_server
+  end
+
+  def setup_config
+    @home = Pathname.new(ENV['HOME'])
+    @pwd = Pathname.new(Dir.pwd).dirname
+    @name = @pwd.basename
+    ENV['GIT_DIR']       = (@gitdir  = @pwd + 'git').to_s
+    ENV['GIT_WORK_TREE'] = (@workdir = @pwd + 'repo').to_s
+    setup_path
+  end
+
+  def setup_path
+    path = JSON.parse(File.read(@home + 'PATH.json'))
+    ENV['PATH'] = (path << ENV['PATH']).join(?:)
+  end
+
+  def checkout
+    `git clean -fd`
+    `git checkout HEAD -f`
+  end
+
+  def change_workdir
+    Dir.chdir(@workdir)
+  end
+
+  def compile
+    system('cmake .')
+    system('make')
+  end
+
+  EXEC_KILL = [0].pack(?N)
+  EXEC_RUN  = [1].pack(?N)
+  EXEC_EXIT = [2].pack(?N)
+
+  def restart_server
+    port = File.read(@home + 'observer_port' + @name).to_i
+    socket = TCPSocket.new(@name.to_s, port)
+    socket.write(EXEC_KILL)
+    print socket.gets
+    socket.write(EXEC_RUN)
+    print socket.gets
+    socket.write(EXEC_EXIT)
+  end
+end
+
+Builder.new.run

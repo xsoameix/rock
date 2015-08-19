@@ -1,0 +1,89 @@
+#!/usr/bin/env ruby
+
+class AirwebSenderNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'sender'
+      }, [], {
+        from: 'archlinux',
+        uid: '1015',
+      })
+    end
+  end
+
+  def port
+    {sender_port => sender_port,
+     observer_port => observer_port}
+  end
+
+  def sender_port; '59265' end
+  def observer_port; '54358' end
+
+  def host_env
+    {OBSERVER_ADDR: '0.0.0.0',
+     OBSERVER_PORT: observer_port,
+     SENDER_ADDR:   '0.0.0.0',
+     SENDER_PORT:   sender_port}
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_gcc
+    as_user do
+      configure_observer
+      generate_interface
+    end
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_gcc
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'gcc')
+  end
+
+  def configure_observer
+    add_config_file(pwd + observer_path, observer_path)
+    run('gcc', '-o', pwd + observer_path.basename(observer_path.extname),
+        pwd + observer_path);
+  end
+
+  def generate_interface
+    cmd(pwd + observer_path.basename(observer_path.extname))
+  end
+
+  def observer_path; Pathname.new('observer.c') end
+
+  def repo_path; Pathname.new('repo') end
+
+  def volume
+    [repo_path].map { |path| [pwd + path, host_pwd + path, 'ro'] }
+  end
+
+  def volume_exclude
+    [repo_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    (node_pwd + repo_path).exist?
+  end
+
+  def setup_volume
+    mkdir(node_pwd + repo_path)
+  end
+
+  def clean_volume
+    rmdir(node_pwd + repo_path)
+  end
+end

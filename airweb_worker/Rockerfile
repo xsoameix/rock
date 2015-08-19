@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+
+class AirwebWorkerNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'worker'
+      }, [], {
+        from: 'archlinux',
+        uid: '1014'
+      })
+    end
+  end
+
+  def repo
+    @repo ||= Node.load(node_root, app_name, 'airweb')
+  end
+
+  def links
+    [['airweb_postgres', Airweb.dbaddr]]
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_node
+    as_user do
+      generate_interface
+    end
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_node
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'nodejs')
+  end
+
+  def generate_interface
+    cmd('node', pwd + repo.repo_path + 'server/worker')
+  end
+
+  def volume
+    [[pwd + repo.repo_path, repo.host_pwd + repo.repo_path, 'ro']]
+  end
+
+  def volume_exclude
+    [repo.repo_path]
+  end
+
+  def dependent_volume_setup?
+    repo.volume_setup?
+  end
+
+  def volume_setup?
+    (node_pwd + repo.repo_path).exist?
+  end
+
+  def setup_volume
+    mkdir(node_pwd + repo.repo_path)
+  end
+
+  def clean_volume
+    rmdir(node_pwd + repo.repo_path)
+  end
+end

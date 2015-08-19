@@ -1,0 +1,90 @@
+#!/usr/bin/env ruby
+require_relative '../npm'
+
+class NpmNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'npm'
+      }, [], {
+        from: 'archlinux',
+        uid: '1024'
+      })
+    end
+  end
+
+  def links
+    [['npm_couchdb', Npm.dbaddr]]
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_nodejs_and_npm
+    configure_npm
+    generate_interface
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_nodejs_and_npm
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'nodejs', 'npm', 'git')
+  end
+
+  def configure_npm
+    as_user do
+      install_couchapp
+      configure_couchapp
+    end
+  end
+
+  def install_couchapp
+    run('git', 'clone', 'https://github.com/npm/npm-registry-couchapp')
+    run('cd', pwd + couchapp_path)
+    run('npm', 'install')
+  end
+
+  def configure_couchapp
+    registry = '--npm-registry-couchapp:couch="$COUCHDB_ENV_REGISTRY"'
+    run('echo', "'#!/bin/bash'",               '>>', pwd + entrypoint)
+    run('echo', "'cd #{pwd + couchapp_path}'", '>>', pwd + entrypoint)
+    run('echo', "'npm start #{registry}'",     '>>', pwd + entrypoint)
+    run('chmod', '+x',                               pwd + entrypoint)
+  end
+
+  def generate_interface
+    cmd(pwd + entrypoint)
+  end
+
+  def entrypoint; 'entrypoint.sh' end
+
+  def couchapp_path; 'npm-registry-couchapp' end
+
+  def volume
+    []
+  end
+
+  def volume_exclude
+    []
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    true
+  end
+
+  def setup_volume
+  end
+
+  def clean_volume
+  end
+end
