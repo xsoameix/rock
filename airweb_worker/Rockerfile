@@ -19,7 +19,8 @@ class AirwebWorkerNode < Node
   end
 
   def links
-    [['airweb_postgres', Airweb.dbaddr]]
+    [['airweb_postgres', Airweb.dbaddr],
+     ['airweb_sender', Airweb.sender_addr]]
   end
 
   def generate
@@ -27,6 +28,7 @@ class AirwebWorkerNode < Node
     create_user
     install_node
     as_user do
+      configure_sender
       generate_interface
     end
   end
@@ -41,9 +43,22 @@ class AirwebWorkerNode < Node
     run('pacman', '-S', '--noconfirm', 'nodejs')
   end
 
-  def generate_interface
-    cmd('node', pwd + repo.repo_path + 'server/worker')
+  def configure_sender
+    worker = pwd + repo.repo_path + 'server/worker'
+    file = pwd + entrypoint
+    run("echo '#!/bin/bash'",                                '>>', file)
+    run("echo 'export PG_CONN=$PG_ENV_CONN'",                '>>', file)
+    run("echo 'export SENDER_ADDR=#{Airweb.sender_addr}'",   '>>', file)
+    run("echo 'export SENDER_PORT=$SENDER_ENV_SENDER_PORT'", '>>', file)
+    run("echo 'exec node #{worker}'",                        '>>', file)
+    run('chmod', '+x',                                             file)
   end
+
+  def generate_interface
+    cmd(pwd + entrypoint)
+  end
+
+  def entrypoint; 'entrypoint.sh' end
 
   def volume
     [[pwd + repo.repo_path, repo.host_pwd + repo.repo_path, 'ro']]

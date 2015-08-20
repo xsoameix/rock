@@ -26,7 +26,9 @@ class AirwebSenderNode < Node
     {OBSERVER_ADDR: '0.0.0.0',
      OBSERVER_PORT: observer_port,
      SENDER_ADDR:   '0.0.0.0',
-     SENDER_PORT:   sender_port}
+     SENDER_PORT:   sender_port,
+     CONNECT_ADDR:  '172.20.50.110',
+     CONNECT_PORT:  '502'}
   end
 
   def generate
