@@ -215,7 +215,7 @@ char **
 get_sender_envp(char * const * keys, size_t keys_len) {
   void * mem;
   char * value, ** envp, * str;
-  size_t envp_size = sizeof(*envp); /* NULL */
+  size_t envp_size = sizeof(*envp), envp_len = 0; /* envp: {NULL} */
   size_t strs_size = 0, str_len, i;
   for (i = 0; i < keys_len; i++) {
     if ((value = getenv(keys[i])) == NULL) continue;
@@ -228,10 +228,10 @@ get_sender_envp(char * const * keys, size_t keys_len) {
     if ((value = getenv(keys[i])) == NULL) continue;
     str_len = strlen(keys[i]) + 1 + strlen(value) + 1;
     snprintf(str, str_len, "%s=%s", keys[i], value);
-    envp[i] = str;
+    envp[envp_len++] = str;
     str += str_len;
   }
-  envp[i] = NULL;
+  envp[envp_len] = NULL;
   return envp;
 }
 
@@ -242,7 +242,10 @@ do_run_sender(jmp_buf * fail) {
   char * const exe = "repo/air";
   char * const argv[] = {exe, NULL};
   char * const keys[] = {
-    "SENDER_ADDR", "SENDER_PORT", "CONNECT_ADDR", "CONNECT_PORT"};
+    "SENDER_ADDR",
+    "SENDER_PORT",
+    "CONNECT_ADDR",
+    "CONNECT_PORT"};
   char ** envp;
   if (access(exe, F_OK) == -1 && !fail) for (;;) pause();
   envp = get_sender_envp(keys, LEN(keys));
