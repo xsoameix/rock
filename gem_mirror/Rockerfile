@@ -1,0 +1,110 @@
+#!/usr/bin/env ruby
+require 'yaml'
+require_relative '../lib'
+
+class GemMirrorNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'gemmirror'
+      }, [], {
+        from: 'archlinux',
+        uid: '1025'
+      })
+    end
+  end
+
+  include Compilers
+
+  def generate
+    generate_header
+    create_user
+    install_ruby
+    configure_ruby
+    generate_interface
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_ruby
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'ruby')
+  end
+
+  def configure_ruby
+    as_user do
+      setup_gem_path
+      install_gems
+      configure_mirror
+      configure_geminabox
+    end
+  end
+
+  def install_gems
+    run('gem', 'install', 'rubygems-mirror', 'geminabox')
+  end
+
+  def configure_mirror
+    file = pwd + '.gem/.mirrorrc'
+    config = [{
+      'from'        => 'https://rubygems.org',
+      'to'          => (pwd + data_path).to_s,
+      'parallelism' => 10,
+      'retries'     => 3,
+      'delete'      => false,
+      'skiperror'   => true
+    }].to_yaml
+    File.open(node_pwd + mirrorrc_path, ?w) { |f| f.write(config) }
+    run('mkdir', pwd + data_path)
+    add_config_file(file, mirrorrc_path)
+  end
+
+  def configure_geminabox
+    add_config_file(pwd + configru_path, configru_path)
+    add_config_file(pwd + entrypoint, entrypoint)
+  end
+
+  def generate_interface
+    cmd(pwd + entrypoint)
+  end
+
+  def entrypoint; 'entrypoint.sh' end
+
+  def configru_path; 'config.ru'   end
+  def mirrorrc_path; 'mirrorrc'    end
+
+  def data_path; Pathname.new('data') end
+
+  def volume
+    [data_path].map { |path| [pwd + path, host_pwd + path] }
+  end
+
+  def volume_exclude
+    [data_path]
+  end
+
+  def gitignore
+    [mirrorrc_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    (node_pwd + data_path).exist?
+  end
+
+  def setup_volume
+    mkdir(node_pwd + data_path)
+  end
+
+  def clean_volume
+    rmdir(node_pwd + data_path)
+  end
+end
