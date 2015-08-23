@@ -21,7 +21,7 @@ class NginxNode < Node
   def web_port; '443' end
 
   def links
-    [['airweb']]
+    [['airweb'], ['liber']]
   end
 
   def generate

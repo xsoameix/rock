@@ -4,11 +4,12 @@ require_relative '../npm'
 
 class Repo
 
-  attr_reader :name, :node
+  attr_reader :name, :node, :db
 
-  def initialize(node_root, app_name, node_name)
+  def initialize(node_root, app_name, node_name, db)
     @name = Pathname.new(node_name)
     @node = Node.load(node_root, app_name, node_name)
+    @db   = db
   end
 end
 
@@ -44,13 +45,18 @@ class GitNode < Node
   include Compilers
 
   def links
-    [['npm_couchdb', Npm.dbaddr]] + repo.map { |r| [r.name] }
+    [['npm_couchdb', Npm.dbaddr]] +
+      repo.map { |r| [r.name, "repo_#{r.name}"] } +
+      repo.select { |r| r.db }.map { |r| [r.db, "db_#{r.name}"] }
   end
 
   def repo
-    @repo ||= [['airweb',        NodejsRepo],
-               ['airweb_sender', CRepo]].map do |node_name, klass|
-      klass.new(node_root, app_name, node_name)
+    @repo ||= [
+      ['airweb',        NodejsRepo],
+      ['airweb_sender', CRepo],
+      ['liber',         RailsRepo, 'liber_postgres']
+    ].map do |node_name, klass, db|
+      klass.new(node_root, app_name, node_name, db)
     end
   end
 
@@ -76,7 +82,7 @@ class GitNode < Node
   def install_openssl_git_and_base_devel
     run('pacman', '-Syy')
     run('pacman', '-S', '--noconfirm', 'openssh', 'git',
-        'ruby', 'python2', 'nodejs', 'npm', 'base-devel',
+        'ruby', 'postgresql', 'python2', 'nodejs', 'npm', 'base-devel',
         'cmake', 'check', 'pkg-config')
   end
 
@@ -90,6 +96,8 @@ class GitNode < Node
       setup_npm_registry
       install_livescript
       install_nitrogen
+      setup_gem_path
+      install_bundler
       add_observer_config
     end
   end
@@ -133,6 +141,7 @@ class GitNode < Node
     registry = '"$COUCHDB_ENV_REWRITE"'
     run("echo '#!/bin/bash'",                           '>>', pwd + entrypoint)
     run("echo 'npm config set registry #{registry}'",   '>>', pwd + entrypoint)
+    run("echo 'env > #{pwd + 'env'}'",                  '>>', pwd + entrypoint)
     run("echo 'exec /usr/sbin/sshd -D -p #{git_port}'", '>>', pwd + entrypoint)
     run('chmod', '+x',                                        pwd + entrypoint)
   end
@@ -178,20 +187,23 @@ class GitNode < Node
     repo.all? { |r| (node_pwd + repo_path + r.name + repo_path).exist? }
   end
 
-  def setup_volume
-    repo.each do |r|
-      `setfacl -m d:u:#{uid}:rwx #{r.node.node_pwd + repo_path}`
-      `setfacl -m u:#{uid}:rwx #{r.node.node_pwd + repo_path}`
-      mkdir(node_pwd + repo_path + r.name + repo_path)
-    end
-    repo.each do |r|
-      chdir(pwd + repo_path + r.name) do
-        script('git', 'init', '--bare', git_path)
-        postfile = git_path + 'hooks/post-receive'
-        script('ln', '-s', pwd + hook_path + r.action, postfile)
+  def setup_volume(filter = nil)
+    setup = repo.select { |r| filter ? r.name.to_s == filter : true }
+    if setup.size > 0
+      setup.each do |r|
+        `setfacl -m d:u:#{uid}:rwx #{r.node.node_pwd + repo_path}`
+        `setfacl -m u:#{uid}:rwx #{r.node.node_pwd + repo_path}`
+        mkdir(node_pwd + repo_path + r.name + repo_path)
       end
+      setup.each do |r|
+        chdir(pwd + repo_path + r.name) do
+          script('git', 'init', '--bare', git_path)
+          postfile = git_path + 'hooks/post-receive'
+          script('ln', '-s', pwd + hook_path + r.action, postfile)
+        end
+      end
+      exec_container('setup')
     end
-    exec_container('setup')
   end
 
   def clean_volume(filter = nil)

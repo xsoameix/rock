@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+require_relative '../postgres'
+require_relative '../liber'
+
+class LiberPostgresNode < PostgresNode
+
+  def dbaddr; Liber.dbaddr end
+  def dbuser; Liber.user   end
+  def dbname; Liber.dbname end
+end

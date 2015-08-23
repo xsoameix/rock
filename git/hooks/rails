@@ -1,1 +1,158 @@
 #!/usr/bin/env ruby
+require 'pathname'
+require 'fileutils'
+require 'socket'
+
+class Builder
+
+  def run
+    time_elapsed do
+      setup_config
+      setup_git do
+        set_use_cache
+        reuse_vendor do
+          checkout
+        end
+      end
+      change_workdir do
+        setup_path
+        install_vendor
+        setup_database do
+          setup_rails_env do
+            compile_assets
+          end
+        end
+        restart_server
+      end
+    end
+  end
+
+  def time_elapsed
+    time = Time.now
+    yield
+    min, sec = (Time.now.to_f - time.to_f).divmod(60.0)
+    puts('Time used: %3d:%04.2f' % [min.to_i, sec])
+  end
+
+  def setup_config
+    @home = Pathname.new(ENV['HOME'])
+    @pwd = Pathname.new(Dir.pwd).dirname
+    @env = (@home + 'env').readlines
+    @name = @pwd.basename
+    @envname = @name.to_s.upcase
+    @gitdir  = @pwd + 'git'
+    @workdir = @pwd + 'repo'
+    @vendor_src = @workdir + 'vendor/bundle'
+    @vendor_dst = @pwd + 'bundle'
+    @vendor_pivot = 'Gemfile'
+  end
+
+  def setup_git
+    ENV['GIT_DIR']       = (@gitdir).to_s
+    ENV['GIT_WORK_TREE'] = (@workdir).to_s
+    yield
+    ENV.delete('GIT_DIR')
+    ENV.delete('GIT_WORK_TREE')
+  end
+
+  def set_use_cache
+    @use_vendor_cache = use_cache?(@vendor_pivot)
+  end
+
+  def use_cache?(pivot)
+    use_cache = false
+    if (`git branch`.size > 0 &&
+        `git ls-tree HEAD --name-only`[/^#{pivot}$/] &&
+        (pivot_path = @workdir + pivot).exist?)
+      old = File.read(pivot_path)
+      `git checkout HEAD #{pivot}`
+      new = File.read(pivot_path)
+      use_cache = old == new
+    end
+    use_cache
+  end
+
+  def reuse_vendor
+    if @vendor_src.exist?
+      `mv #{@vendor_src} #{@vendor_dst}`
+      yield
+      `mv #{@vendor_dst} #{@vendor_src}`
+    else
+      yield
+    end
+  end
+
+  def checkout
+    `git clean -fd`
+    `git checkout HEAD -f`
+  end
+
+  def change_workdir
+    Dir.chdir(@workdir) do
+      yield
+    end
+  end
+
+  def setup_path
+    path = find_env('PATH')
+    ENV['PATH'] = [Pathname.new(Gem.user_dir) + 'bin', path].join(?:)
+  end
+
+  def find_env(key)
+    @env.find { |l| l.start_with?("#{key}=") }
+    .sub(/^#{key}=/, '').sub(/\n\Z/, '')
+  end
+
+  def install_vendor
+    if @use_vendor_cache
+      puts 'Use vendor cache'
+    else
+      system('bundle install --deployment')
+    end
+  end
+
+  def setup_database
+    file = @workdir + 'config/database.yml'
+    env = find_env("REPO_#{@envname}_ENV_RACK_ENV")
+    val = ['host',     "db_#{@name}",
+           'port',     find_env("DB_#{@envname}_ENV_PORT"),
+           'username', find_env("DB_#{@envname}_ENV_USER"),
+           'password', find_env("DB_#{@envname}_ENV_PASS"),
+           'database', find_env("DB_#{@envname}_ENV_DB"),
+           'adapter',  find_env("DB_#{@envname}_ENV_ADAP")]
+    File.open(file, 'w') do |f|
+      f.puts("#{env}:")
+      val.each_slice(2) { |k,v| f.puts("  #{k}: #{v}") }
+    end
+    yield
+    FileUtils.cp(@home + 'hooks/rails.d/database.yml.erb', file)
+  end
+
+  def setup_rails_env
+    ENV['RAILS_ENV']       = find_env("REPO_#{@envname}_ENV_RAILS_ENV")
+    ENV['SECRET_KEY_BASE'] = find_env("REPO_#{@envname}_ENV_SECRET_KEY_BASE")
+    yield
+    ENV.delete('RSECRET_KEY_BASE')
+    ENV.delete('RAILS_ENV')
+  end
+
+  def compile_assets
+    system('bundle exec rake assets:precompile')
+  end
+
+  EXEC_KILL = [0].pack(?N)
+  EXEC_RUN  = [1].pack(?N)
+  EXEC_EXIT = [2].pack(?N)
+
+  def restart_server
+    port = File.read(@home + 'observer_port' + @name).to_i
+    socket = TCPSocket.new("repo_#{@name.to_s}", port)
+    socket.write(EXEC_KILL)
+    print socket.gets
+    socket.write(EXEC_RUN)
+    print socket.gets
+    socket.write(EXEC_EXIT)
+  end
+end
+
+Builder.new.run

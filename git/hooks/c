@@ -47,7 +47,7 @@ class Builder
 
   def restart_server
     port = File.read(@home + 'observer_port' + @name).to_i
-    socket = TCPSocket.new(@name.to_s, port)
+    socket = TCPSocket.new("repo_#{@name.to_s}", port)
     socket.write(EXEC_KILL)
     print socket.gets
     socket.write(EXEC_RUN)

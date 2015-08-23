@@ -8,12 +8,18 @@ class Builder
   def run
     time_elapsed do
       setup_config
-      set_use_cache
-      checkout
-      change_workdir
-      install_vendor
-      compile_assets
-      restart_server
+      setup_git do
+        set_use_cache
+        reuse_vendor do
+          checkout
+        end
+      end
+      change_workdir do
+        setup_path
+        install_vendor
+        compile_assets
+        restart_server
+      end
     end
   end
 
@@ -27,19 +33,22 @@ class Builder
   def setup_config
     @home = Pathname.new(ENV['HOME'])
     @pwd = Pathname.new(Dir.pwd).dirname
+    @env = (@home + 'env').readlines
     @name = @pwd.basename
-    ENV['GIT_DIR']       = (@gitdir  = @pwd + 'git').to_s
-    ENV['GIT_WORK_TREE'] = (@workdir = @pwd + 'repo').to_s
+    @gitdir  = @pwd + 'git'
+    @workdir = @pwd + 'repo'
     @vendor_src = @workdir + 'node_modules'
     @vendor_dst = @pwd + 'node_modules'
     @vendor_pivot = 'package.ls'
     @vendor_assets_pivot = 'bower.ls'
-    setup_path
   end
 
-  def setup_path
-    path = JSON.parse(File.read(@home + 'PATH.json'))
-    ENV['PATH'] = (path << ENV['PATH']).join(?:)
+  def setup_git
+    ENV['GIT_DIR']       = (@gitdir).to_s
+    ENV['GIT_WORK_TREE'] = (@workdir).to_s
+    yield
+    ENV.delete['GIT_DIR']
+    ENV.delete['GIT_WORK_TREE']
   end
 
   def set_use_cache
@@ -60,13 +69,6 @@ class Builder
     use_cache
   end
 
-  def checkout
-    reuse_vendor do
-      `git clean -fd`
-      `git checkout HEAD -f`
-    end
-  end
-
   def reuse_vendor
     if @vendor_src.exist?
       `mv #{@vendor_src} #{@vendor_dst}`
@@ -77,8 +79,24 @@ class Builder
     end
   end
 
+  def checkout
+    `git clean -fd`
+    `git checkout HEAD -f`
+  end
+
   def change_workdir
-    Dir.chdir(@workdir)
+    Dir.chdir(@workdir) do
+      yield
+    end
+  end
+
+  def setup_path
+    ENV['PATH'] = find_env('PATH')
+  end
+
+  def find_env(key)
+    @env.find { |l| l.start_with?("#{key}=") }
+    .sub(/^#{key}=/, '').sub(/\n\Z/, '')
   end
 
   def install_vendor
@@ -101,14 +119,18 @@ class Builder
     system('npm run assets:precompile:app')
   end
 
+  EXEC_KILL = [0].pack(?N)
+  EXEC_RUN  = [1].pack(?N)
+  EXEC_EXIT = [2].pack(?N)
+
   def restart_server
     port = File.read(@home + 'observer_port' + @name).to_i
-    socket = TCPSocket.new(@name.to_s, port)
-    socket.puts('kill')
+    socket = TCPSocket.new("repo_#{@name.to_s}", port)
+    socket.write(EXEC_KILL)
     print socket.gets
-    socket.puts('run')
+    socket.write(EXEC_RUN)
     print socket.gets
-    socket.puts('exit')
+    socket.write(EXEC_EXIT)
   end
 end
 

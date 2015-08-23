@@ -4,7 +4,6 @@ module Compilers
     run('mkdir', pwd + compiler_path)
     @bin = pwd + compiler_path + 'bin'
     env('PATH', "#{@bin}:$PATH")
-    add_config_json('PATH.json', [@bin])
   end
 
   def setup_npm_prefix
@@ -14,6 +13,15 @@ module Compilers
   def install_livescript
     @lsc = @bin + 'lsc'
     run('npm', 'install', '-g', 'livescript', 'node-gyp')
+  end
+
+  def setup_gem_path
+    @gem_path = "PATH=$(ruby -e 'print Gem.user_dir')/bin:$PATH"
+    run('export', @gem_path)
+  end
+
+  def install_bundler
+    run('gem', 'install', 'bundler')
   end
 
   def install_nitrogen

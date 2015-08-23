@@ -1,0 +1,159 @@
+#!/usr/bin/env ruby
+require_relative '../lib'
+require_relative '../liber'
+
+class LiberNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: Liber.user
+      }, [], {
+        from: 'archlinux',
+        uid: '1031'
+      })
+    end
+  end
+
+  include Compilers
+  include Observer
+
+  def port
+    {web_port => web_port,
+     observer_port => observer_port}
+  end
+
+  def web_port;      '58236' end
+  def observer_port; '58424' end
+
+  def host_env
+    observer_envp = {
+      HOME: pwd,
+      PORT: web_port,
+      RACK_ENV:  'production',
+      RAILS_ENV: 'production',
+      SECRET_KEY_BASE: (node_pwd + secret_key_base).read,
+      SSL_ADDR: '0.0.0.0',
+      SSL_CRT: pwd + ssl_path + 'server.crt',
+      SSL_KEY: pwd + ssl_path + 'server.key'
+    }
+    observer_envp.merge(observer_bind).merge(
+      OBSERVER_ADDR: '0.0.0.0',
+      OBSERVER_PORT: observer_port,
+      OBSERVER_CWD:  repo_path,
+      OBSERVER_EXEC: pwd + 'foreman',
+      OBSERVER_ARGV: 'start -f Procfile -d .',
+      OBSERVER_ENVP: (observer_envp.keys + %w(PATH)).join(?:),
+      OBSERVER_BIND: observer_bind.keys.join(?:)
+    )
+  end
+
+  def observer_bind
+    {DB_HOST: 'PG_ENV_ADDR',
+     DB_PORT: 'PG_ENV_PORT',
+     DB_USER: 'PG_ENV_USER',
+     DB_PASS: 'PG_ENV_PASS',
+     DB_NAME: 'PG_ENV_DB',
+     DB_ADAP: 'PG_ENV_ADAP'}
+  end
+
+  def links
+    [['liber_postgres', Liber.dbaddr]]
+  end
+
+  def generate
+    generate_header
+    create_user
+    install_ruby
+    as_user do
+      setup_gem_path
+      install_bundler
+      install_foreman
+      configure_observer
+      configure_gem
+      configure_bashrc
+      generate_interface
+    end
+  end
+
+  def create_user
+    run('groupadd', '-g', gid, name)
+    run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
+  end
+
+  def install_ruby
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm', 'ruby', 'postgresql', 'gcc')
+  end
+
+  def install_foreman
+    run('gem', 'install', 'foreman')
+    run('ln', '-s', '`which foreman`', 'foreman')
+  end
+
+  def configure_gem
+    gem_path = @gem_path.gsub(?') { |s| "'\"'\"'" }
+    observer = pwd + observer_path.basename(observer_path.extname)
+    run('echo', "'#!/bin/bash'",        '>>', pwd + entrypoint)
+    run('echo', "'export #{gem_path}'", '>>', pwd + entrypoint)
+    run('echo', "'exec #{observer}'",   '>>', pwd + entrypoint)
+    run('chmod', '+x',                        pwd + entrypoint)
+  end
+
+  def configure_bashrc
+    bashrc = pwd + '.bashrc'
+    run('echo', "'export TERM=xterm'", '>>', bashrc)
+    observer_bind.map do |k,v| 
+      run('echo', "'export #{k}=$#{v}'", '>>', bashrc)
+    end
+  end
+
+  def generate_interface
+    cmd(pwd + entrypoint)
+  end
+
+  def secret_key_base; 'secret_key_base' end
+
+  def entrypoint; 'entrypoint.sh' end
+
+  def repo_path; Pathname.new('repo') end
+  def log_path;  Pathname.new('log') end
+  def ssl_path;  Pathname.new('ssl') end
+
+  def volume
+    [[pwd + repo_path + log_path, host_pwd + log_path]] +
+      [repo_path, ssl_path].map { |path| [pwd + path, host_pwd + path, 'ro'] }
+  end
+
+  def volume_exclude
+    [repo_path, log_path, ssl_path]
+  end
+
+  def gitignore
+    [secret_key_base, observer_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    (node_pwd + repo_path).exist?
+  end
+
+  def setup_volume
+    mkdir(node_pwd + repo_path)
+    mkdir(node_pwd + log_path)
+    mkdir(node_pwd + ssl_path)
+    secret = node_pwd + secret_key_base
+    if !secret.exist?
+      secret.write(SecureRandom.hex(64))
+    end
+  end
+
+  def clean_volume
+    rmdir(node_pwd + repo_path)
+    rmdir(node_pwd + log_path)
+  end
+end
