@@ -64,7 +64,7 @@ class NginxNode < Node
   end
 
   def volume_exclude
-    [certs_path]
+    [confd_path, certs_path]
   end
 
   def dependent_volume_setup?
