@@ -1,0 +1,136 @@
+#!/usr/bin/env ruby
+
+class PostfixNode < Node
+
+  class << self
+
+    def create
+      new({
+        name: 'postfix'
+      }, [], {
+        from: 'archlinux'
+      })
+    end
+  end
+
+  def host_env
+    {TERM: 'xterm'}
+  end
+
+  def port
+    {smtp_port => smtp_port}
+  end
+
+  def smtp_port; '25' end
+
+  def generate
+    generate_header
+    create_user
+    install_postfix
+    configure_systemd
+    configure_postfix
+    generate_interface
+  end
+
+  def create_user
+    run('groupadd', nil_user)
+    run('useradd', '-g', nil_user, '-m', '-s /bin/bash', nil_user)
+  end
+
+  def nil_user; 'nil' end
+
+  def install_postfix
+    run('pacman', '-Syy')
+    run('pacman', '-S', '--noconfirm',
+        'postfix', 'openssl', 's-nail', 'systemd')
+  end
+
+  def configure_systemd
+    run('cd', '/lib/systemd/system/sysinit.target.wants')
+    run('for i in *; do',
+        '  [ $i != systemd-tmpfiles-setup.service ] && rm -f $i;',
+        'done')
+    run('rm', '-f',
+        '/lib/systemd/system/multi-user.target.wants/*',
+        '/etc/systemd/system/*.wants/*',
+        '/lib/systemd/system/local-fs.target.wants/*',
+        '/lib/systemd/system/sockets.target.wants/*udev*',
+        '/lib/systemd/system/sockets.target.wants/*initctl*')
+    env('container', 'docker')
+  end
+
+  def configure_postfix
+    master = '/etc/postfix/master.cf'
+    (node_pwd + master_path).readlines.each do |l|
+      run("echo '#{l.chomp}'", '>>', master)
+    end
+
+    main = '/etc/postfix/main.cf'
+    setting = JSON.parse((node_pwd + main_path).read).map do |k,v|
+      "-e '0,\\|^\\W*#{k}\\s=\\s|s|^\\W*#{k}\\s=\\s.\\+|#{k} = #{v}|'"
+    end
+    run('sed', '-i', *setting, main)
+
+    aliases = '/etc/postfix/aliases'
+    setting = {'postmaster' => ['root', nil_user].join(?,)}.map do |k,v|
+      "-e '0,\\|^\\W*#{k}:\\s|s|^\\W*#{k}:\\s.\\+|#{k}: #{v}|'"
+    end
+    run('sed', '-i', *setting, aliases)
+    run('newaliases')
+    run('systemctl', 'enable', 'postfix')
+  end
+
+  def generate_interface
+    expose(smtp_port)
+    cmd('/usr/lib/systemd/systemd')
+  end
+
+  def destroy_container_params
+    {signal: 'SIGKILL'}
+  end
+
+  def master_path; 'master.cf'    end
+  def main_path;   'main.cf.json' end
+
+  def mail_path;    Pathname.new('mail')            end
+  def mail_fullpath;Pathname.new('/var/spool/mail') end
+  def run_path;     Pathname.new('run')             end
+  def run_fullpath; Pathname.new('/run')            end
+
+  def volume
+    [['/sys/fs/cgroup', '/sys/fs/cgroup', 'ro'],
+     [mail_fullpath, host_pwd + mail_path],
+     [run_fullpath, host_pwd + run_path]]
+  end
+
+  def volume_exclude
+    [main_path, mail_path, run_path]
+  end
+
+  def dependent_volume_setup?
+    true
+  end
+
+  def volume_setup?
+    (node_pwd + mail_path).exist?
+  end
+
+  def setup_volume
+    script('echo `id -u postfix; id -g postfix`')
+    @data[:uid], @data[:gid] = exec_container('getuser', Binds: []).scan(/\d+/)
+    mkdir(node_pwd + mail_path) { |path| `chmod 1777 #{path}` }
+    mkdir(node_pwd + run_path) {}
+  end
+
+  def clean_volume
+    (node_pwd + mail_path).children(false).each do |c|
+      script('rm', '-r', mail_fullpath + c)
+    end
+    (node_pwd + run_path).children(false).each do |c|
+      script('rm', '-r', run_fullpath + c)
+    end
+    exec_container('clean')
+    rmdir(node_pwd + mail_path)
+    rmdir(node_pwd + run_path)
+  end
+end
