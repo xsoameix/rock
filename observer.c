@@ -211,46 +211,103 @@ kill_sender(int sock, pid_t sender, int out, int * start, jmp_buf * fail) {
   send_sock(sock, KILL_OK, strlen(KILL_OK), fail);
 }
 
-char **
-get_sender_envp(char * const * keys, size_t keys_len) {
-  void * mem;
-  char * value, ** envp, * str;
-  size_t envp_size = sizeof(*envp), envp_len = 0; /* envp: {NULL} */
-  size_t strs_size = 0, str_len, i;
-  for (i = 0; i < keys_len; i++) {
-    if ((value = getenv(keys[i])) == NULL) continue;
-    strs_size += strlen(keys[i]) + 1 + strlen(value) + 1;
-    envp_size += sizeof(*envp);
-  }
-  envp = mem = malloc(envp_size + strs_size);
-  str = mem + envp_size;
-  for (i = 0; i < keys_len; i++) {
-    if ((value = getenv(keys[i])) == NULL) continue;
-    str_len = strlen(keys[i]) + 1 + strlen(value) + 1;
-    snprintf(str, str_len, "%s=%s", keys[i], value);
-    envp[envp_len++] = str;
-    str += str_len;
-  }
-  envp[envp_len] = NULL;
-  return envp;
+typedef int    env_chk_t(char * key, char ** val);
+typedef size_t env_set_t(char * buf, char * key, char * val, int set);
+
+int
+sender_argv(char * key, char ** val) {
+  return key == NULL;
 }
 
-#define LEN(ary) (sizeof(ary)/sizeof(*ary))
+int
+sender_envp(char * key, char ** val) {
+  return (* val = getenv(key)) == NULL;
+}
+
+int
+sender_bind(char * key, char ** val) {
+  return (* val = getenv(key)) == NULL || (* val = getenv(* val)) == NULL;
+}
+
+size_t
+key_only(char * buf, char * key, char * val, int set) {
+  size_t size = strlen(key) + 1;
+  if (!set) snprintf(buf, size, "%s", key);
+  return size;
+}
+
+size_t
+key_and_val(char * buf, char * key, char * val, int set) {
+  size_t size = strlen(key) + 1 + strlen(val) + 1;
+  if (!set) snprintf(buf, size, "%s=%s", key, val);
+  return size;
+}
 
 void
-do_run_sender(jmp_buf * fail) {
-  char * const exe = "repo/air";
-  char * const argv[] = {exe, NULL};
-  char * const keys[] = {
-    "SENDER_ADDR",
-    "SENDER_PORT",
-    "CONNECT_ADDR",
-    "CONNECT_PORT"};
-  char ** envp;
-  if (access(exe, F_OK) == -1 && !fail) for (;;) pause();
-  envp = get_sender_envp(keys, LEN(keys));
+sender_env(char * env, char * del, env_chk_t * check, env_set_t * setup,
+    char ** strs, char *** envp, int set) {
+  char * str, * key, * val;
+  size_t size, i;
+  if (env == NULL) return;
+  str = strdup(env);
+  for (key = strtok(str, del); key != NULL; key = strtok(NULL, del)) {
+    if (check(key, &val)) continue;
+    size = setup(* strs, key, val, set);
+    if (set)    * (size_t *) envp += 1, * strs += size;
+    else ** envp = * strs, * envp += 1, * strs += size;
+  }
+  free(str);
+}
+
+void
+sender_env_init(char ** strs, char *** envp) {
+  void * mem;
+  size_t envp_size = * (size_t *) envp * sizeof(** envp);
+  size_t strs_size = * (size_t *) strs;
+  * envp = mem = malloc(envp_size + strs_size), * strs = mem + envp_size;
+}
+
+char **
+get_sender_argv(char * exe) {
+  char * argv = getenv("OBSERVER_ARGV");
+  char * strs = (void *) strlen(exe) + 1;
+  char ** ret = (void *) 2, ** ori; /* {exe, ..., NULL} */
+  sender_env(argv, " ", sender_argv, key_only, &strs, &ret, 1);
+  sender_env_init(&strs, &ret), ori = ret;
+  * ret++ = exe;
+  sender_env(argv, " ", sender_argv, key_only, &strs, &ret, 0);
+  * ret = NULL;
+  return ori;
+}
+
+char **
+get_sender_envp(void) {
+  char * envp = getenv("OBSERVER_ENVP");
+  char * bind = getenv("OBSERVER_BIND");
+  char * strs = 0, ** ret = (void *) 1, ** ori;
+  sender_env(envp, ":", sender_envp, key_and_val, &strs, &ret, 1);
+  sender_env(bind, ":", sender_bind, key_and_val, &strs, &ret, 1);
+  sender_env_init(&strs, &ret), ori = ret;
+  sender_env(envp, ":", sender_envp, key_and_val, &strs, &ret, 0);
+  sender_env(bind, ":", sender_bind, key_and_val, &strs, &ret, 0);
+  * ret = NULL;
+  return ori;
+}
+
+void
+do_run_sender(void) {
+  char *  cwd  = getenv("OBSERVER_CWD");
+  char *  exe  = getenv("OBSERVER_EXEC");
+  char ** argv = get_sender_argv(exe);
+  char ** envp = get_sender_envp();
+  if (cwd != NULL) chdir(cwd);
+  if (exe == NULL) {
+    perror("environment variable OBSERVER_EXEC is not set");
+    return;
+  }
   execve(exe, argv, envp);
   free(envp);
+  free(argv);
 }
 
 void
@@ -279,10 +336,10 @@ run_sender(int sock, pid_t * sender, int * out, jmp_buf * fail) {
   dup2(pfd[1], 1);
   dup2(pfd[1], 2);
   close(pfd[1]);
-  do_run_sender(fail);
+  do_run_sender();
   dup2(save[1], 2);
   dup2(save[0], 1);
-  ERR("execve failed");
+  if (!fail) perror("execve failed"); /* !fail == first time */
   for (;;) pause();
 }
 
@@ -299,7 +356,7 @@ exec_command(int sock, pid_t * sender, int * out, int * start) {
     recv_sock(sock, &cmd, sizeof(cmd), &fail), cmd = ntohl(cmd);
     if (cmd == EXEC_KILL) kill_sender(sock, * sender, * out, start, &fail);
     if (cmd == EXEC_RUN)  run_sender(sock, sender, out, &fail);
-    if (cmd == EXEC_EXIT) close(sock), leave = 1;
+    if (cmd == EXEC_EXIT) leave = 1;
   }
 }
 
@@ -313,6 +370,7 @@ do_accept_socket(pid_t * sender, int * out, int * start, int server_sock) {
     return;
   }
   exec_command(sock, sender, out, start);
+  close(sock);
 }
 
 void

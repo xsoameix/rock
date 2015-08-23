@@ -31,3 +31,19 @@ module Compilers
 
   def compiler_path; Pathname.new('compiler') end
 end
+
+module Observer
+
+  def configure_observer
+    FileUtils.cp(node_pwd.dirname + observer_path, node_pwd + observer_path)
+    add_config_file(pwd + observer_path, observer_path)
+    run('gcc', '-o', pwd + observer_path.basename(observer_path.extname),
+        pwd + observer_path);
+  end
+
+  def observer_path; Pathname.new('observer.c') end
+
+  def gitignore
+    [observer_path]
+  end
+end

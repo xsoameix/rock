@@ -17,6 +17,7 @@ class AirwebNode < Node
   end
 
   include Compilers
+  include Observer
 
   def port
     {web_port => web_port,
@@ -27,13 +28,27 @@ class AirwebNode < Node
   def observer_port; '54494' end
 
   def host_env
-    {OBSERVER_PORT: observer_port,
-     REPO_PATH: repo_path,
-     PORT: web_port,
-     NODE_ENV: 'production',
-     SSL_CRT: pwd + ssl_path + 'server.crt',
-     SSL_KEY: pwd + ssl_path + 'server.key',
-     SESSION_SECRET: SecureRandom.base64}
+    observer_envp = {
+      PORT: web_port,
+      NODE_ENV: 'production',
+      SSL_CRT: pwd + ssl_path + 'server.crt',
+      SSL_KEY: pwd + ssl_path + 'server.key',
+      SESSION_SECRET: SecureRandom.base64
+    }
+    observer_bind = {
+      PG_CONN:    'PG_ENV_CONN',
+      REDIS_HOST: 'REDIS_ENV_ADDR',
+      REDIS_PORT: 'REDIS_ENV_PORT'
+    }
+    observer_envp.merge(observer_bind).merge(
+      OBSERVER_ADDR: '0.0.0.0',
+      OBSERVER_PORT: observer_port,
+      OBSERVER_CWD:  repo_path,
+      OBSERVER_EXEC: '/usr/sbin/node',
+      OBSERVER_ARGV: 'server/app.js',
+      OBSERVER_ENVP: (observer_envp.keys + %w(PATH)).join(?:),
+      OBSERVER_BIND: observer_bind.keys.join(?:)
+    )
   end
 
   def links
@@ -60,21 +75,12 @@ class AirwebNode < Node
 
   def install_node
     run('pacman', '-Syy')
-    run('pacman', '-S', '--noconfirm', 'nodejs', 'npm', 'base-devel')
-  end
-
-  def configure_observer
-    add_config_file(pwd + observer_path, observer_path)
-    with_path(@bin) do
-      run(@lsc, '-c', pwd + observer_path)
-    end
+    run('pacman', '-S', '--noconfirm', 'nodejs', 'npm', 'gcc')
   end
 
   def generate_interface
-    cmd('node', pwd + observer_path.basename(observer_path.extname))
+    cmd(pwd + observer_path.basename(observer_path.extname))
   end
-
-  def observer_path; Pathname.new('observer.ls') end
 
   def repo_path; Pathname.new('repo') end
   def ssl_path;  Pathname.new('ssl') end

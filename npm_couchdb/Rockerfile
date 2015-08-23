@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-require_relative '../lib'
 require_relative '../npm'
 
 class NpmCouchdbNode < Node
@@ -15,8 +14,6 @@ class NpmCouchdbNode < Node
       })
     end
   end
-
-  include Compilers
 
   def port
     {couchdb_port => couchdb_port}
