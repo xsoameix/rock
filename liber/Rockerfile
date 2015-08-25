@@ -96,7 +96,6 @@ class LiberNode < Node
   end
 
   def configure_gem
-    gem_path = @gem_path.gsub(?') { |s| "'\"'\"'" }
     observer = pwd + observer_path.basename(observer_path.extname)
     run('echo', "'#!/bin/bash'",        '>>', pwd + entrypoint)
     run('echo', "'export #{gem_path}'", '>>', pwd + entrypoint)
@@ -106,10 +105,28 @@ class LiberNode < Node
 
   def configure_bashrc
     bashrc = pwd + '.bashrc'
-    run('echo', "'export TERM=xterm'", '>>', bashrc)
-    observer_bind.map do |k,v| 
-      run('echo', "'export #{k}=$#{v}'", '>>', bashrc)
+    bundle = gsub_quote("'require \"bundler\"; print Bundler.bundle_path'")
+    exec = gsub_quote("alias ${i##*/}='bundle exec ${i##*/}'")
+    run("echo 'cd #{repo_path}'                        >>", bashrc)
+    run("echo 'export TERM=xterm'                      >>", bashrc)
+    run("echo 'export #{gem_path}'                     >>", bashrc)
+    run("echo 'bin_path=`ruby -e #{bundle}`/bin'       >>", bashrc)
+    run("echo 'for i in $bin_path/*; do'               >>", bashrc)
+    run("echo '  echo \"#{exec}\" >> ~/.bundle.bashrc' >>", bashrc)
+    run("echo 'done'                                   >>", bashrc)
+    run("echo 'source ~/.bundle.bashrc'                >>", bashrc)
+    run("echo 'rm ~/.bundle.bashrc'                    >>", bashrc)
+    observer_bind.map do |k,v|
+      run("echo 'export #{k}=$#{v}'                    >>", bashrc)
     end
+  end
+
+  def gem_path
+    gsub_quote(@gem_path)
+  end
+
+  def gsub_quote(string)
+    string.gsub(?') { |s| "'\"'\"'" }
   end
 
   def generate_interface
