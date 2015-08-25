@@ -28,6 +28,7 @@ class LiberNode < Node
   def observer_port; '58424' end
 
   def host_env
+    mailer = JSON.parse((node_pwd + mailer_conf).read)
     observer_envp = {
       HOME: pwd,
       PORT: web_port,
@@ -36,7 +37,9 @@ class LiberNode < Node
       SECRET_KEY_BASE: (node_pwd + secret_key_base).read,
       SSL_ADDR: '0.0.0.0',
       SSL_CRT: pwd + ssl_path + 'server.crt',
-      SSL_KEY: pwd + ssl_path + 'server.key'
+      SSL_KEY: pwd + ssl_path + 'server.key',
+      SENDGRID_USERNAME: mailer['username'],
+      SENDGRID_PASSWORD: mailer['password']
     }
     observer_envp.merge(observer_bind).merge(
       OBSERVER_ADDR: '0.0.0.0',
@@ -113,7 +116,8 @@ class LiberNode < Node
     cmd(pwd + entrypoint)
   end
 
-  def secret_key_base; 'secret_key_base' end
+  def secret_key_base; 'secret_key_base'  end
+  def mailer_conf;     'mailer.conf.json' end
 
   def entrypoint; 'entrypoint.sh' end
 
@@ -131,7 +135,7 @@ class LiberNode < Node
   end
 
   def gitignore
-    [secret_key_base, observer_path]
+    [secret_key_base, mailer_conf, observer_path]
   end
 
   def dependent_volume_setup?

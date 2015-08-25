@@ -2,4 +2,5 @@
 /log
 /ssl
 /secret_key_base
+/mailer.conf.json
 /observer.c
