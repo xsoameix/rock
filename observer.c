@@ -57,7 +57,14 @@ build_addr(char ** addr, char ** port) {
   return res;
 }
 
-#define TITLE "[observer]"
+#define COLOR_FG(code) "38;5;" code
+#define COLOR_NONE   "0"
+#define COLOR_BLUE   COLOR_FG("75")
+#define COLOR_PURPLE COLOR_FG("141")
+#define COLOR_MAKE(code) "\e[" code "m"
+#define COLOR_WRAP(str, color) COLOR_MAKE(color) str COLOR_MAKE(COLOR_NONE)
+
+#define TITLE COLOR_WRAP("[observer]", COLOR_BLUE)
 #define INFO(message, ...) \
   do { \
     printf(TITLE " " message, ##__VA_ARGS__), \
@@ -164,6 +171,8 @@ send_sock(int sock, void * buf, size_t len, jmp_buf * fail) {
   }
 }
 
+#define SENDER_TITLE COLOR_WRAP("[sender]", COLOR_PURPLE)
+
 int
 read_sender(int out, int * start) {
   size_t line;
@@ -176,13 +185,13 @@ read_sender(int out, int * start) {
   if (len == 0) return 1;
   buf[len] = '\0';
   while ((next = strchr(pos, '\n')) != NULL) {
-    if (!* start) printf("[sender] ");
+    if (!* start) printf(SENDER_TITLE " ");
     printf("%.*s\n", next - pos, pos);
     pos = next + 1;
     * start = 0;
   }
   if (!* start && * pos)
-    printf("[sender] %s", pos), * start = 1;
+    printf(SENDER_TITLE " %s", pos), * start = 1;
   else
     printf("%s", pos);
   fflush(stdout);

@@ -43,7 +43,7 @@ class LiberNode < Node
       OBSERVER_PORT: observer_port,
       OBSERVER_CWD:  repo_path,
       OBSERVER_EXEC: pwd + 'foreman',
-      OBSERVER_ARGV: 'start -f Procfile -d .',
+      OBSERVER_ARGV: 'start -c -f Procfile -d .',
       OBSERVER_ENVP: (observer_envp.keys + %w(PATH)).join(?:),
       OBSERVER_BIND: observer_bind.keys.join(?:)
     )
