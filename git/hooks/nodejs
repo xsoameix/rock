@@ -47,8 +47,8 @@ class Builder
     ENV['GIT_DIR']       = (@gitdir).to_s
     ENV['GIT_WORK_TREE'] = (@workdir).to_s
     yield
-    ENV.delete['GIT_DIR']
-    ENV.delete['GIT_WORK_TREE']
+    ENV.delete('GIT_DIR')
+    ENV.delete('GIT_WORK_TREE')
   end
 
   def set_use_cache
