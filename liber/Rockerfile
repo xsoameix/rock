@@ -28,9 +28,11 @@ class LiberNode < Node
   def observer_port; '58424' end
 
   def host_env
+    domain = JSON.parse((node_pwd + domain_conf).read)
     mailer = JSON.parse((node_pwd + mailer_conf).read)
     observer_envp = {
       HOME: pwd,
+      DOMAIN: domain['domain'],
       PORT: web_port,
       RACK_ENV:  'production',
       RAILS_ENV: 'production',
@@ -135,6 +137,7 @@ class LiberNode < Node
 
   def secret_key_base; 'secret_key_base'  end
   def mailer_conf;     'mailer.conf.json' end
+  def domain_conf;     'domain.conf.json' end
 
   def entrypoint; 'entrypoint.sh' end
 
@@ -152,7 +155,7 @@ class LiberNode < Node
   end
 
   def gitignore
-    [secret_key_base, mailer_conf, observer_path]
+    [secret_key_base, mailer_conf, domain_conf, observer_path]
   end
 
   def dependent_volume_setup?

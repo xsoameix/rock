@@ -3,4 +3,5 @@
 /ssl
 /secret_key_base
 /mailer.conf.json
+/domain.conf.json
 /observer.c
