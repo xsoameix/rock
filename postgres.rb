@@ -18,12 +18,12 @@ class PostgresNode < Node
      DB:   dbname, ADAP: dbadap, CONN: dbconn}
   end
 
-  def dbaddr; raise 'subclass'      end
-  def dbport; '5432'                end
-  def dbuser; raise 'subclass'      end
-  def dbpass; SecureRandom.hex(800) end
-  def dbname; raise 'subclass'      end
-  def dbadap; 'postgresql'          end
+  def dbaddr; raise 'subclass'                  end
+  def dbport; '5432'                            end
+  def dbuser; raise 'subclass'                  end
+  def dbpass; @dbpass ||= SecureRandom.hex(800) end
+  def dbname; raise 'subclass'                  end
+  def dbadap; 'postgresql'                      end
   def dbconn
     "postgres://#{dbuser}:#{dbpass}@#{dbaddr}:#{dbport}/#{dbname}"
   end
