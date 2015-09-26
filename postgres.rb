@@ -120,4 +120,8 @@ class PostgresNode < Node
     exec_container('clean')
     rmdir(node_pwd + postgres_path)
   end
+
+  def destroy_container_params
+    {signal: 'SIGINT'}
+  end
 end
