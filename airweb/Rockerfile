@@ -44,7 +44,7 @@ class AirwebNode < Node
       OBSERVER_ADDR: '0.0.0.0',
       OBSERVER_PORT: observer_port,
       OBSERVER_CWD:  repo_path,
-      OBSERVER_EXEC: '/usr/sbin/node',
+      OBSERVER_EXEC: pwd + node_path,
       OBSERVER_ARGV: 'server/app.js',
       OBSERVER_ENVP: (observer_envp.keys + %w(PATH)).join(?:),
       OBSERVER_BIND: observer_bind.keys.join(?:)
@@ -58,11 +58,9 @@ class AirwebNode < Node
   def generate
     generate_header
     create_user
-    install_node
+    install_gcc
     as_user do
-      setup_compiler_env
-      setup_npm_prefix
-      install_livescript
+      install_nvm
       configure_observer
       generate_interface
     end
@@ -73,9 +71,9 @@ class AirwebNode < Node
     run('useradd', '-u', uid, '-g', gid, '-m', '-s /sbin/nologin', name)
   end
 
-  def install_node
+  def install_gcc
     run('pacman', '-Syy')
-    run('pacman', '-S', '--noconfirm', 'nodejs', 'npm', 'gcc')
+    run('pacman', '-S', '--noconfirm', 'gcc')
   end
 
   def generate_interface

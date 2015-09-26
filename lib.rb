@@ -6,6 +6,19 @@ module Compilers
     env('PATH', "#{@bin}:$PATH")
   end
 
+  def install_nvm
+    url = 'https://raw.githubusercontent.com/creationix/nvm/v0.26.1/install.sh'
+    run('curl', '-o-', "#{url} | bash")
+    run("export NVM_DIR=\"/home/#{name}/.nvm\"")
+    run('[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"')
+    run('nvm', 'install', node_version)
+  end
+
+  def node_version; 'v0.12.7' end
+  def node_path
+    Pathname.new('.nvm/versions/node') + node_version + 'bin/node'
+  end
+
   def setup_npm_prefix
     run('npm', 'config', 'set', 'prefix', pwd + compiler_path)
   end

@@ -82,7 +82,7 @@ class GitNode < Node
   def install_openssl_git_and_base_devel
     run('pacman', '-Syy')
     run('pacman', '-S', '--noconfirm', 'openssh', 'git',
-        'ruby', 'postgresql', 'python2', 'nodejs', 'npm', 'base-devel',
+        'ruby', 'postgresql', 'python2', 'base-devel',
         'cmake', 'check', 'pkg-config')
   end
 
@@ -92,6 +92,7 @@ class GitNode < Node
     as_user do
       add_authorized_keys
       setup_compiler_env
+      install_nvm
       setup_npm_prefix
       setup_npm_registry
       install_livescript
