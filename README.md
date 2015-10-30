@@ -14,3 +14,10 @@ For instance, setup the volume of `airweb_postgres` and run it.
 For instance, delete `airweb_postgres` container and clean the volume.
 
     $ rocker remove rock airweb_postgres
+    
+# Build and Run airweb_postgres
+
+    $ rocker regen rock airweb_postgres
+    $ rocker rebuild rock airweb_postgres
+    $ rocker setup rock airweb_postgres
+    $ rocker restart rock airweb_postgres
