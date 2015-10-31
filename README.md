@@ -2,22 +2,26 @@
 
 A cookbook containing Rockerfiles and configurations for each container.
 
-# Starting a Service
+# Usage
 
-For instance, setup the volume of `airweb_postgres` and run it.
+## Starting a Service
 
-    $ rocker setup rock airweb_postgres
-    $ rocker restart rock airweb_postgres
+You need to generate the dockerfile and build the image of the *CONTAINER*.
 
-# Stop a Service
+    $ rocker rebuild rock <CONTAINER>
 
-For instance, delete `airweb_postgres` container and clean the volume.
+Then, setup the volume of the *CONTAINER*.
 
-    $ rocker remove rock airweb_postgres
-    
-# Build and Run airweb_postgres
+    $ rocker setup rock <CONTAINER>
 
-    $ rocker regen rock airweb_postgres
-    $ rocker rebuild rock airweb_postgres
-    $ rocker setup rock airweb_postgres
-    $ rocker restart rock airweb_postgres
+Finally the *CONTAINER* is ready to run. You can run it by
+
+    $ rocker restart rock <CONTAINER>
+
+*CONTAINER* can be any folder name under the project, eg: `airweb_postgres`
+
+## Stop a Service
+
+For instance, delete *CONTAINER* container and clean the volume.
+
+    $ rocker remove rock <CONTAINER>
