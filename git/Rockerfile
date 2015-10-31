@@ -142,6 +142,9 @@ class GitNode < Node
   def setup_npm_registry
     registry = '"$COUCHDB_ENV_REWRITE"'
     run("echo '#!/bin/bash'",                           '>>', pwd + entrypoint)
+    run("echo 'export NVM_DIR=\"/home/#{name}/.nvm\"'", '>>', pwd + entrypoint)
+    run("echo '[ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"'",  '>>', pwd + entrypoint)
+    run("echo 'nvm use --silent stable'",               '>>', pwd + entrypoint)
     run("echo 'npm config set registry #{registry}'",   '>>', pwd + entrypoint)
     run("echo 'env > #{pwd + 'env'}'",                  '>>', pwd + entrypoint)
     run("echo 'exec /usr/sbin/sshd -D -p #{git_port}'", '>>', pwd + entrypoint)
