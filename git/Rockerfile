@@ -216,7 +216,7 @@ class GitNode < Node
     if remove.size > 0
       remove.each do |r|
         puts r.name
-        Container.find_and_destroy(r.node.fullname)
+        Container.find_and_destroy(r.node.fullname, destroy_container_params)
         (r.node.node_pwd + repo_path).children(false).each do |c|
           script('rm', '-r', pwd + repo_path + r.name + repo_path + c)
         end
