@@ -35,7 +35,7 @@ class AirwebSenderNode < Node
     observer_envp.merge(
       OBSERVER_ADDR: '0.0.0.0',
       OBSERVER_PORT: observer_port,
-      OBSERVER_EXEC: repo_path + 'air',
+      OBSERVER_EXEC: repo_path + 'modbox',
       OBSERVER_ENVP: observer_envp.keys.join(?:)
     )
   end

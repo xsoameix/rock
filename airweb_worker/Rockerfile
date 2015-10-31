@@ -20,7 +20,8 @@ class AirwebWorkerNode < Node
 
   def links
     [['airweb_postgres', Airweb.dbaddr],
-     ['airweb_sender', Airweb.sender_addr]]
+     ['airweb_m758', Airweb.m758_addr],
+     ['airweb_mpan', Airweb.mpan_addr]]
   end
 
   def generate
@@ -46,12 +47,14 @@ class AirwebWorkerNode < Node
   def configure_sender
     worker = pwd + repo.repo_path + 'server/worker'
     file = pwd + entrypoint
-    run("echo '#!/bin/bash'",                                '>>', file)
-    run("echo 'export PG_CONN=$PG_ENV_CONN'",                '>>', file)
-    run("echo 'export SENDER_ADDR=#{Airweb.sender_addr}'",   '>>', file)
-    run("echo 'export SENDER_PORT=$SENDER_ENV_SENDER_PORT'", '>>', file)
-    run("echo 'exec node #{worker}'",                        '>>', file)
-    run('chmod', '+x',                                             file)
+    run("echo '#!/bin/bash'",                            '>>', file)
+    run("echo 'export PG_CONN=$PG_ENV_CONN'",            '>>', file)
+    run("echo 'export M758_ADDR=#{Airweb.m758_addr}'",   '>>', file)
+    run("echo 'export M758_PORT=$M758_ENV_SENDER_PORT'", '>>', file)
+    run("echo 'export MPAN_ADDR=#{Airweb.mpan_addr}'",   '>>', file)
+    run("echo 'export MPAN_PORT=$MPAN_ENV_SENDER_PORT'", '>>', file)
+    run("echo 'exec node #{worker}'",                    '>>', file)
+    run('chmod', '+x',                                         file)
   end
 
   def generate_interface

@@ -52,9 +52,10 @@ class GitNode < Node
 
   def repo
     @repo ||= [
-      ['airweb',        NodejsRepo],
-      ['airweb_sender', CRepo],
-      ['liber',         RailsRepo, 'liber_postgres']
+      ['airweb',      NodejsRepo],
+      ['airweb_m758', CRepo],
+      ['airweb_mpan', CRepo],
+      ['liber',       RailsRepo, 'liber_postgres']
     ].map do |node_name, klass, db|
       klass.new(node_root, app_name, node_name, db)
     end

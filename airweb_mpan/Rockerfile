@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+load Pathname.new(__FILE__) + '../../airweb_sender/Rockerfile'
+
+class AirwebMpanNode < AirwebSenderNode
+
+  class << self
+
+    def create
+      new({
+        name: 'mpan'
+      }, [], {
+        from: 'archlinux',
+        uid: '1017',
+      })
+    end
+  end
+
+  def sender_port; '59267' end
+  def observer_port; '54360' end
+
+  def host_env
+    observer_envp = {
+      SENDER_ADDR:  '0.0.0.0',
+      SENDER_PORT:  sender_port,
+      CONNECT_ADDR: '172.20.50.111',
+      CONNECT_PORT: '502'
+    }
+    observer_envp.merge(
+      OBSERVER_ADDR: '0.0.0.0',
+      OBSERVER_PORT: observer_port,
+      OBSERVER_EXEC: repo_path + 'modbox',
+      OBSERVER_ENVP: observer_envp.keys.join(?:)
+    )
+  end
+end

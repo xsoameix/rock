@@ -23,8 +23,7 @@ class Builder
   end
 
   def setup_path
-    path = JSON.parse(File.read(@home + 'PATH.json'))
-    ENV['PATH'] = (path << ENV['PATH']).join(?:)
+    ENV['PATH'] = [@home + 'compiler/bin', ENV['PATH']].join(?:)
   end
 
   def checkout

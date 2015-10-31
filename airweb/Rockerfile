@@ -33,12 +33,16 @@ class AirwebNode < Node
       NODE_ENV: 'production',
       SSL_CRT: pwd + ssl_path + 'server.crt',
       SSL_KEY: pwd + ssl_path + 'server.key',
-      SESSION_SECRET: SecureRandom.base64
+      SESSION_SECRET: SecureRandom.base64,
+      M758_ADDR:  Airweb.m758_addr,
+      MPAN_ADDR:  Airweb.mpan_addr
     }
     observer_bind = {
       PG_CONN:    'PG_ENV_CONN',
       REDIS_HOST: 'REDIS_ENV_ADDR',
-      REDIS_PORT: 'REDIS_ENV_PORT'
+      REDIS_PORT: 'REDIS_ENV_PORT',
+      M758_PORT:  'M758_ENV_SENDER_PORT',
+      MPAN_PORT:  'MPAN_ENV_SENDER_PORT'
     }
     observer_envp.merge(observer_bind).merge(
       OBSERVER_ADDR: '0.0.0.0',
@@ -52,7 +56,10 @@ class AirwebNode < Node
   end
 
   def links
-    [['airweb_postgres', Airweb.dbaddr], ['airweb_redis', Airweb.session_addr]]
+    [['airweb_postgres', Airweb.dbaddr],
+     ['airweb_redis', Airweb.session_addr],
+     ['airweb_m758', Airweb.m758_addr],
+     ['airweb_mpan', Airweb.mpan_addr]]
   end
 
   def generate

@@ -6,6 +6,7 @@ class Airweb
     def dbaddr; 'pg' end
     def dbname; "#{user}_production" end
     def session_addr; 'redis' end
-    def sender_addr; 'sender' end
+    def m758_addr; 'm758' end
+    def mpan_addr; 'mpan' end
   end
 end
