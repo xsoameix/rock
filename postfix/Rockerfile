@@ -32,6 +32,8 @@ class PostfixNode < Node
     generate_interface
   end
 
+  # eg: useradd -g nil -M -s /bin/bash <name>
+  #     userdel -r <name>
   def create_user
     run('groupadd', nil_user)
     run('useradd', '-g', nil_user, '-m', '-s /bin/bash', nil_user)
