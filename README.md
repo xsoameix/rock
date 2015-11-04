@@ -2,7 +2,7 @@
 
 A cookbook containing Rockerfiles and configurations for each container.
 
-# Usage
+# General Service Usage
 
 ## Starting a Service
 
@@ -22,6 +22,28 @@ Finally the *CONTAINER* is ready to run. You can run it by
 
 ## Stop a Service
 
-For instance, delete *CONTAINER* container and clean the volume.
+For instance, delete *CONTAINER* container and **clean the volume**.
 
     $ rocker remove rock <CONTAINER>
+
+# Special Service Usage
+
+## NPM
+
+### Start Service
+
+    $ rocker setup npm_couchdb
+    $ rocker restart npm_couchdb
+    $ rocker setup npm
+    $ rocker restart npm
+    $ rocker destroy npm
+
+## Stop Service
+
+Delete *CONTAINER* container only
+
+    $ rocker destroy rock npm_couchdb
+
+Delete *CONTAINER* container and **clean the volume**.
+
+    $ rocker remove rock npm_couchdb
