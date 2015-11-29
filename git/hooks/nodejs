@@ -104,7 +104,6 @@ class Builder
       puts 'Use vendor cache'
     else
       system("lsc #{@vendor_pivot}")
-      system("lsc #{@vendor_assets_pivot}")
       system('npm install --production -q')
       system('npm prune')
     end
@@ -114,6 +113,7 @@ class Builder
     if @use_vendor_assets_cache
       puts 'Use vendor assets cache'
     else
+      system("lsc #{@vendor_assets_pivot}")
       system('npm run assets:precompile:vendor')
     end
     system('npm run assets:precompile:app')
