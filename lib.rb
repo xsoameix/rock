@@ -14,7 +14,7 @@ module Compilers
     run('nvm', 'install', node_version)
   end
 
-  def node_version; 'v4.2.2' end
+  def node_version; 'v4.2.3' end
   def node_path
     Pathname.new('.nvm/versions/node') + node_version + 'bin/node'
   end
