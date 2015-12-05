@@ -40,7 +40,6 @@ class Builder
     @vendor_src = @workdir + 'node_modules'
     @vendor_dst = @pwd + 'node_modules'
     @vendor_pivot = 'package.ls'
-    @vendor_assets_pivot = 'bower.ls'
   end
 
   def setup_git
@@ -52,8 +51,7 @@ class Builder
   end
 
   def set_use_cache
-    @use_vendor_cache        = use_cache?(@vendor_pivot)
-    @use_vendor_assets_cache = use_cache?(@vendor_assets_pivot)
+    @use_vendor_cache = use_cache?(@vendor_pivot)
   end
 
   def use_cache?(pivot)
@@ -110,13 +108,7 @@ class Builder
   end
 
   def compile_assets
-    if @use_vendor_assets_cache
-      puts 'Use vendor assets cache'
-    else
-      system("lsc #{@vendor_assets_pivot}")
-      system('npm run assets:precompile:vendor')
-    end
-    system('npm run assets:precompile:app')
+    system('npm run build')
   end
 
   EXEC_KILL = [0].pack(?N)
