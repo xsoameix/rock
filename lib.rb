@@ -15,8 +15,11 @@ module Compilers
   end
 
   def node_version; 'v4.2.3' end
+  def node_install_path
+    Pathname.new('.nvm/versions/node') + node_version + 'bin'
+  end
   def node_path
-    Pathname.new('.nvm/versions/node') + node_version + 'bin/node'
+    node_install_path + 'node'
   end
 
   def setup_npm_prefix

@@ -37,13 +37,6 @@ class AirwebNode < Node
       M758_ADDR:  Airweb.m758_addr,
       MPAN_ADDR:  Airweb.mpan_addr
     }
-    observer_bind = {
-      PG_CONN:    'PG_ENV_CONN',
-      REDIS_HOST: 'REDIS_ENV_ADDR',
-      REDIS_PORT: 'REDIS_ENV_PORT',
-      M758_PORT:  'M758_ENV_SENDER_PORT',
-      MPAN_PORT:  'MPAN_ENV_SENDER_PORT'
-    }
     observer_envp.merge(observer_bind).merge(
       OBSERVER_ADDR: '0.0.0.0',
       OBSERVER_PORT: observer_port,
@@ -53,6 +46,14 @@ class AirwebNode < Node
       OBSERVER_ENVP: (observer_envp.keys + %w(PATH)).join(?:),
       OBSERVER_BIND: observer_bind.keys.join(?:)
     )
+  end
+
+  def observer_bind
+    {PG_CONN:    'PG_ENV_CONN',
+     REDIS_HOST: 'REDIS_ENV_ADDR',
+     REDIS_PORT: 'REDIS_ENV_PORT',
+     M758_PORT:  'M758_ENV_SENDER_PORT',
+     MPAN_PORT:  'MPAN_ENV_SENDER_PORT'}
   end
 
   def links
@@ -69,6 +70,7 @@ class AirwebNode < Node
     as_user do
       install_nvm
       configure_observer
+      configure_bashrc
       generate_interface
     end
   end
@@ -81,6 +83,18 @@ class AirwebNode < Node
   def install_gcc
     run('pacman', '-Syy')
     run('pacman', '-S', '--noconfirm', 'gcc')
+  end
+
+  def configure_bashrc
+    bashrc = pwd + '.bashrc'
+    modules_path = './node_modules/.bin'
+    run("echo 'cd #{repo_path}'                                  >>", bashrc)
+    run("echo 'export TERM=xterm'                                >>", bashrc)
+    run("echo 'export PATH=\"#{pwd + node_install_path}:$PATH\"' >>", bashrc)
+    run("echo 'export PATH=\"#{modules_path}:$PATH\"'            >>", bashrc)
+    observer_bind.map do |k,v|
+      run("echo 'export #{k}=$#{v}'                              >>", bashrc)
+    end
   end
 
   def generate_interface
